@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Smart GPU Parking System</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f4f7f6; margin: 0; padding: 20px; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        h1 { text-align: center; color: #2c3e50; }
+        .zones-grid { display: flex; gap: 20px; margin-top: 20px; }
+        .card { flex: 1; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); border-top: 5px solid #3498db; }
+        .card.full { border-top-color: #e74c3c; }
+        .spot-badge { font-size: 24px; font-weight: bold; color: #27ae60; margin: 10px 0; }
+        .spot-badge.full { color: #e74c3c; }
+        .booking-box { background: white; padding: 20px; margin-top: 30px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        input, button { padding: 12px; font-size: 16px; border-radius: 6px; border: 1px solid #ccc; }
+        button { background: #3498db; color: white; border: none; cursor: pointer; transition: 0.3s; }
+        button:hover { background: #2980b9; }
+        .btn-danger { background: #e74c3c; margin-left: 10px; }
+        .btn-danger:hover { background: #c0392b; }
+        #responseLog { margin-top: 15px; padding: 12px; border-radius: 6px; background: #eef9fe; color: #1c638e; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🚗 Smart GPU-Based Parking Gateway</h1>
+
+    <div class="zones-grid" id="zonesGrid"></div>
+
+    <div class="booking-box">
+        <h3>Book Parking (Gateway Request)</h3>
+        <input type="text" id="vehicleInput" placeholder="Enter Vehicle No. (e.g., MH-12-AB-1234)">
+        <button onclick="bookParking()">Book Instant Slot</button>
+        <button onclick="clearData()" class="btn-danger">Clear / Reset All Data</button>
+
+        <div id="responseLog" style="display:none;"></div>
+    </div>
+</div>
+
+<script>
+    async function loadZones() {
+        const res = await fetch('/api/zones-status');
+        const zones = await res.json();
+        
+        const grid = document.getElementById('zonesGrid');
+        grid.innerHTML = '';
+
+        zones.forEach(zone => {
+            const isFull = zone.free_spots <= 0 || !zone.is_available;
+            
+            grid.innerHTML += `
+                <div class="card ${isFull ? 'full' : ''}">
+                    <h3>${zone.name}</h3>
+                    <p><strong>GPU Node:</strong> ${zone.zone_id}</p>
+                    <div class="spot-badge ${isFull ? 'full' : ''}">
+                        ${zone.free_spots} / ${zone.total_spots} Free Spots
+                    </div>
+                    <p>Occupied Spots: ${zone.occupied_spots}</p>
+                    <p>Active GPU Requests: ⚡ ${zone.active_gpu_requests} / 4 Max</p>
+                    <p><strong>Status:</strong> ${isFull ? '🔴 FULL' : '🟢 AVAILABLE'}</p>
+                </div>
+            `;
+        });
+    }
+
+    async function bookParking() {
+        const vehicle = document.getElementById('vehicleInput').value;
+        if (!vehicle) { alert('Please enter vehicle number!'); return; }
+
+        const res = await fetch(`/api/book-parking?vehicle_number=${encodeURIComponent(vehicle)}`, {
+            method: 'POST'
+        });
+        const data = await res.json();
+
+        const log = document.getElementById('responseLog');
+        log.style.display = 'block';
+
+        if (res.ok) {
+            log.innerHTML = `
+                ✅ <strong>Instant Gateway Confirmation:</strong><br>
+                • Job ID: <code>${data.job_id}</code><br>
+                • Assigned Zone: <strong>${data.assigned_zone_name} (${data.gpu_assigned})</strong><br>
+                • Status: Processing in background (2 sec GPU job)...
+            `;
+            loadZones();
+            setTimeout(loadZones, 2500);
+        } else {
+            log.innerHTML = `❌ Error: ${data.detail}`;
+        }
+    }
+
+    async function clearData() {
+        if(!confirm("Kya aap saara parking data reset karna chahte hain?")) return;
+        
+        const res = await fetch('/api/reset-data', { method: 'POST' });
+        const data = await res.json();
+        
+        document.getElementById('vehicleInput').value = '';
+        const log = document.getElementById('responseLog');
+        log.style.display = 'block';
+        log.innerHTML = `🔄 <strong>${data.message}</strong>`;
+        
+        loadZones();
+    }
+
+    setInterval(loadZones, 2000);
+    loadZones();
+</script>
+
+</body>
+</html>
